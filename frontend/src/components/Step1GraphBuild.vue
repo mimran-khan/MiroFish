@@ -6,25 +6,25 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">01</span>
-            <span class="step-title">本体生成</span>
+            <span class="step-title">Ontology Generation</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase > 0" class="badge success">已完成</span>
-            <span v-else-if="currentPhase === 0" class="badge processing">生成中</span>
-            <span v-else class="badge pending">等待</span>
+            <span v-if="currentPhase > 0" class="badge success">Complete</span>
+            <span v-else-if="currentPhase === 0" class="badge processing">Generating...</span>
+            <span v-else class="badge pending">Waiting</span>
           </div>
         </div>
         
         <div class="card-content">
           <p class="api-note">POST /api/graph/ontology/generate</p>
           <p class="description">
-            LLM分析文档内容与模拟需求，提取出现实种子，自动生成合适的本体结构
+            The LLM analyzes document content and simulation requirements, extracts real-world seeds, and automatically generates a suitable ontology structure.
           </p>
 
           <!-- Loading / Progress -->
           <div v-if="currentPhase === 0 && ontologyProgress" class="progress-section">
             <div class="spinner-sm"></div>
-            <span>{{ ontologyProgress.message || '正在分析文档...' }}</span>
+            <span>{{ ontologyProgress.message || 'Analyzing document...' }}</span>
           </div>
 
           <!-- Detail Overlay -->
@@ -110,34 +110,34 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">02</span>
-            <span class="step-title">GraphRAG构建</span>
+            <span class="step-title">GraphRAG Build</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase > 1" class="badge success">已完成</span>
+            <span v-if="currentPhase > 1" class="badge success">Complete</span>
             <span v-else-if="currentPhase === 1" class="badge processing">{{ buildProgress?.progress || 0 }}%</span>
-            <span v-else class="badge pending">等待</span>
+            <span v-else class="badge pending">Waiting</span>
           </div>
         </div>
 
         <div class="card-content">
           <p class="api-note">POST /api/graph/build</p>
           <p class="description">
-            基于生成的本体，将文档自动分块后调用 Zep 构建知识图谱，提取实体和关系，并形成时序记忆与社区摘要
+            Based on the generated ontology, documents are chunked automatically; Zep builds the knowledge graph, extracts entities and relations, and forms temporal memory and community summaries.
           </p>
           
           <!-- Stats Cards -->
           <div class="stats-grid">
             <div class="stat-card">
               <span class="stat-value">{{ graphStats.nodes }}</span>
-              <span class="stat-label">实体节点</span>
+              <span class="stat-label">Entity Nodes</span>
             </div>
             <div class="stat-card">
               <span class="stat-value">{{ graphStats.edges }}</span>
-              <span class="stat-label">关系边</span>
+              <span class="stat-label">Relationship Edges</span>
             </div>
             <div class="stat-card">
               <span class="stat-value">{{ graphStats.types }}</span>
-              <span class="stat-label">SCHEMA类型</span>
+              <span class="stat-label">SCHEMA types</span>
             </div>
           </div>
         </div>
@@ -148,23 +148,23 @@
         <div class="card-header">
           <div class="step-info">
             <span class="step-num">03</span>
-            <span class="step-title">构建完成</span>
+            <span class="step-title">Build Complete</span>
           </div>
           <div class="step-status">
-            <span v-if="currentPhase >= 2" class="badge accent">进行中</span>
+            <span v-if="currentPhase >= 2" class="badge accent">In progress</span>
           </div>
         </div>
         
         <div class="card-content">
           <p class="api-note">POST /api/simulation/create</p>
-          <p class="description">图谱构建已完成，请进入下一步进行模拟环境搭建</p>
+          <p class="description">Graph build is complete. Proceed to the next step to set up the simulation environment.</p>
           <button 
             class="action-btn" 
             :disabled="currentPhase < 2 || creatingSimulation"
             @click="handleEnterEnvSetup"
           >
             <span v-if="creatingSimulation" class="spinner-sm"></span>
-            {{ creatingSimulation ? '创建中...' : '进入环境搭建 ➝' }}
+            {{ creatingSimulation ? 'Creating...' : 'Enter Environment Setup ➝' }}
           </button>
         </div>
       </div>
@@ -208,10 +208,10 @@ const selectedOntologyItem = ref(null)
 const logContent = ref(null)
 const creatingSimulation = ref(false)
 
-// 进入环境搭建 - 创建 simulation 并跳转
+// Enter environment setup: create simulation and navigate
 const handleEnterEnvSetup = async () => {
   if (!props.projectData?.project_id || !props.projectData?.graph_id) {
-    console.error('缺少项目或图谱信息')
+    console.error('Missing project or graph information')
     return
   }
   
@@ -226,18 +226,17 @@ const handleEnterEnvSetup = async () => {
     })
     
     if (res.success && res.data?.simulation_id) {
-      // 跳转到 simulation 页面
       router.push({
         name: 'Simulation',
         params: { simulationId: res.data.simulation_id }
       })
     } else {
-      console.error('创建模拟失败:', res.error)
-      alert('创建模拟失败: ' + (res.error || '未知错误'))
+      console.error('Failed to create simulation:', res.error)
+      alert('Failed to create simulation: ' + (res.error || 'Unknown error'))
     }
   } catch (err) {
-    console.error('创建模拟异常:', err)
-    alert('创建模拟异常: ' + err.message)
+    console.error('Error creating simulation:', err)
+    alert('Error creating simulation: ' + err.message)
   } finally {
     creatingSimulation.value = false
   }
@@ -296,7 +295,7 @@ watch(() => props.systemLogs.length, () => {
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
   border: 1px solid #EAEAEA;
   transition: all 0.3s ease;
-  position: relative; /* For absolute overlay */
+  position: relative; /* For absolute overlay positioning */
 }
 
 .step-card.active {
@@ -362,7 +361,7 @@ watch(() => props.systemLogs.length, () => {
   margin-bottom: 16px;
 }
 
-/* Step 01 Tags */
+/* Step 01: tags */
 .tags-container {
   margin-top: 12px;
   transition: opacity 0.3s;
@@ -407,10 +406,10 @@ watch(() => props.systemLogs.length, () => {
     border-color: #CCC;
 }
 
-/* Ontology Detail Overlay */
+/* Ontology detail overlay */
 .ontology-detail-overlay {
     position: absolute;
-    top: 60px; /* Below header roughly */
+    top: 60px; /* Below header */
     left: 20px;
     right: 20px;
     bottom: 20px;
@@ -568,7 +567,7 @@ watch(() => props.systemLogs.length, () => {
     color: #BBB;
 }
 
-/* Step 02 Stats */
+/* Step 02: stats */
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -598,7 +597,7 @@ watch(() => props.systemLogs.length, () => {
   display: block;
 }
 
-/* Step 03 Button */
+/* Step 03: action button */
 .action-btn {
   width: 100%;
   background: #000;
@@ -641,7 +640,7 @@ watch(() => props.systemLogs.length, () => {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* System Logs */
+/* System logs */
 .system-logs {
   background: #000;
   color: #DDD;
@@ -665,7 +664,7 @@ watch(() => props.systemLogs.length, () => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  height: 80px; /* Approx 4 lines visible */
+  height: 80px; /* ~4 lines visible */
   overflow-y: auto;
   padding-right: 4px;
 }

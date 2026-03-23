@@ -1,18 +1,21 @@
 """
-LLM客户端封装
-统一使用OpenAI格式调用
+LLM client wrapper.
+OpenAI-compatible calls; supports Vertex AI and API-key auth.
 """
 
 import json
 import re
 from typing import Optional, Dict, Any, List
-from openai import OpenAI
 
 from ..config import Config
+from .vertex_ai import create_openai_client
+
+# Some models wrap hidden reasoning in XML-like tags; build pattern without embedding raw tags in source.
+_THINK_BLOCK = re.compile("".join((r"<", r"think", r">[\s\S]*?", r"<", r"/think", r">")))
 
 
 class LLMClient:
-    """LLM客户端"""
+    """Thin wrapper around the configured chat completion client."""
     
     def __init__(
         self,
@@ -20,17 +23,8 @@ class LLMClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None
     ):
-        self.api_key = api_key or Config.LLM_API_KEY
-        self.base_url = base_url or Config.LLM_BASE_URL
         self.model = model or Config.LLM_MODEL_NAME
-        
-        if not self.api_key:
-            raise ValueError("LLM_API_KEY 未配置")
-        
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.base_url
-        )
+        self.client = create_openai_client(api_key=api_key, base_url=base_url)
     
     def chat(
         self,
@@ -40,16 +34,16 @@ class LLMClient:
         response_format: Optional[Dict] = None
     ) -> str:
         """
-        发送聊天请求
-        
+        Run a chat completion.
+
         Args:
-            messages: 消息列表
-            temperature: 温度参数
-            max_tokens: 最大token数
-            response_format: 响应格式（如JSON模式）
-            
+            messages: OpenAI-style messages
+            temperature: Sampling temperature
+            max_tokens: Max tokens to generate
+            response_format: Optional response_format (e.g. JSON mode)
+
         Returns:
-            模型响应文本
+            Assistant message content
         """
         kwargs = {
             "model": self.model,
@@ -63,8 +57,7 @@ class LLMClient:
         
         response = self.client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
-        # 部分模型（如MiniMax M2.5）会在content中包含<think>思考内容，需要移除
-        content = re.sub(r'<think>[\s\S]*?</think>', '', content).strip()
+        content = _THINK_BLOCK.sub("", content).strip()
         return content
     
     def chat_json(
@@ -74,15 +67,15 @@ class LLMClient:
         max_tokens: int = 4096
     ) -> Dict[str, Any]:
         """
-        发送聊天请求并返回JSON
-        
+        Chat completion that returns parsed JSON.
+
         Args:
-            messages: 消息列表
-            temperature: 温度参数
-            max_tokens: 最大token数
-            
+            messages: OpenAI-style messages
+            temperature: Sampling temperature
+            max_tokens: Max tokens to generate
+
         Returns:
-            解析后的JSON对象
+            Parsed JSON object
         """
         response = self.chat(
             messages=messages,
@@ -90,7 +83,6 @@ class LLMClient:
             max_tokens=max_tokens,
             response_format={"type": "json_object"}
         )
-        # 清理markdown代码块标记
         cleaned_response = response.strip()
         cleaned_response = re.sub(r'^```(?:json)?\s*\n?', '', cleaned_response, flags=re.IGNORECASE)
         cleaned_response = re.sub(r'\n?```\s*$', '', cleaned_response)
@@ -99,5 +91,4 @@ class LLMClient:
         try:
             return json.loads(cleaned_response)
         except json.JSONDecodeError:
-            raise ValueError(f"LLM返回的JSON格式无效: {cleaned_response}")
-
+            raise ValueError(f"Invalid JSON from LLM: {cleaned_response}")

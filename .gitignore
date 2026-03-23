@@ -2,13 +2,17 @@
 .DS_Store
 Thumbs.db
 
-# 环境变量（保护敏感信息）
+# Environment variables
 .env
 .env.local
 .env.*.local
 .env.development
 .env.test
 .env.production
+
+# Google Cloud credentials
+*.gcp-credentials.json
+.gcp-credentials.json
 
 # Python
 __pycache__/
@@ -36,7 +40,7 @@ yarn-error.log*
 *.swp
 *.swo
 
-# 测试
+# Testing
 .pytest_cache/
 .coverage
 htmlcov/
@@ -45,16 +49,16 @@ htmlcov/
 .cursor/
 .claude/
 
-# 文档与测试程序
+# Docs and test scripts
 mydoc/
 mytest/
 
-# 日志文件
+# Log files
 backend/logs/
 *.log
 
-# 上传文件
+# Uploaded files
 backend/uploads/
 
-# Docker 数据
+# Docker data
 data/

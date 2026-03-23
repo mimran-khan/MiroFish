@@ -1,8 +1,10 @@
 """
-文件解析工具
-支持PDF、Markdown、TXT文件的文本提取
+File parsing utilities.
+Extracts text from PDF, Markdown, TXT, CSV, and XLSX.
 """
 
+import csv
+import io
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -10,29 +12,27 @@ from typing import List, Optional
 
 def _read_text_with_fallback(file_path: str) -> str:
     """
-    读取文本文件，UTF-8失败时自动探测编码。
-    
-    采用多级回退策略：
-    1. 首先尝试 UTF-8 解码
-    2. 使用 charset_normalizer 检测编码
-    3. 回退到 chardet 检测编码
-    4. 最终使用 UTF-8 + errors='replace' 兜底
-    
+    Read a text file; fall back through encodings if UTF-8 fails.
+
+    Strategy:
+    1. Try UTF-8
+    2. Detect with charset_normalizer
+    3. Fall back to chardet
+    4. Final fallback: UTF-8 with errors='replace'
+
     Args:
-        file_path: 文件路径
-        
+        file_path: Path to the file
+
     Returns:
-        解码后的文本内容
+        Decoded text
     """
     data = Path(file_path).read_bytes()
     
-    # 首先尝试 UTF-8
     try:
         return data.decode('utf-8')
     except UnicodeDecodeError:
         pass
     
-    # 尝试使用 charset_normalizer 检测编码
     encoding = None
     try:
         from charset_normalizer import from_bytes
@@ -42,7 +42,6 @@ def _read_text_with_fallback(file_path: str) -> str:
     except Exception:
         pass
     
-    # 回退到 chardet
     if not encoding:
         try:
             import chardet
@@ -51,7 +50,6 @@ def _read_text_with_fallback(file_path: str) -> str:
         except Exception:
             pass
     
-    # 最终兜底：使用 UTF-8 + replace
     if not encoding:
         encoding = 'utf-8'
     
@@ -59,30 +57,30 @@ def _read_text_with_fallback(file_path: str) -> str:
 
 
 class FileParser:
-    """文件解析器"""
+    """Extract plain text from supported file types."""
     
-    SUPPORTED_EXTENSIONS = {'.pdf', '.md', '.markdown', '.txt'}
+    SUPPORTED_EXTENSIONS = {'.pdf', '.md', '.markdown', '.txt', '.csv', '.xlsx'}
     
     @classmethod
     def extract_text(cls, file_path: str) -> str:
         """
-        从文件中提取文本
-        
+        Extract text from a single file.
+
         Args:
-            file_path: 文件路径
-            
+            file_path: Path to the file
+
         Returns:
-            提取的文本内容
+            Extracted text
         """
         path = Path(file_path)
         
         if not path.exists():
-            raise FileNotFoundError(f"文件不存在: {file_path}")
+            raise FileNotFoundError(f"File not found: {file_path}")
         
         suffix = path.suffix.lower()
         
         if suffix not in cls.SUPPORTED_EXTENSIONS:
-            raise ValueError(f"不支持的文件格式: {suffix}")
+            raise ValueError(f"Unsupported file type: {suffix}")
         
         if suffix == '.pdf':
             return cls._extract_from_pdf(file_path)
@@ -90,16 +88,20 @@ class FileParser:
             return cls._extract_from_md(file_path)
         elif suffix == '.txt':
             return cls._extract_from_txt(file_path)
+        elif suffix == '.csv':
+            return cls._extract_from_csv(file_path)
+        elif suffix == '.xlsx':
+            return cls._extract_from_xlsx(file_path)
         
-        raise ValueError(f"无法处理的文件格式: {suffix}")
+        raise ValueError(f"Cannot handle file type: {suffix}")
     
     @staticmethod
     def _extract_from_pdf(file_path: str) -> str:
-        """从PDF提取文本"""
+        """Extract text from PDF."""
         try:
             import fitz  # PyMuPDF
         except ImportError:
-            raise ImportError("需要安装PyMuPDF: pip install PyMuPDF")
+            raise ImportError("PyMuPDF is required: pip install PyMuPDF")
         
         text_parts = []
         with fitz.open(file_path) as doc:
@@ -112,24 +114,79 @@ class FileParser:
     
     @staticmethod
     def _extract_from_md(file_path: str) -> str:
-        """从Markdown提取文本，支持自动编码检测"""
+        """Read Markdown with encoding detection."""
         return _read_text_with_fallback(file_path)
     
     @staticmethod
     def _extract_from_txt(file_path: str) -> str:
-        """从TXT提取文本，支持自动编码检测"""
+        """Read plain text with encoding detection."""
         return _read_text_with_fallback(file_path)
+    
+    @staticmethod
+    def _extract_from_csv(file_path: str) -> str:
+        """Turn CSV rows into key: value style lines."""
+        raw = _read_text_with_fallback(file_path)
+        reader = csv.DictReader(io.StringIO(raw))
+        
+        if not reader.fieldnames:
+            return raw
+        
+        rows = []
+        for row in reader:
+            parts = [f"{col}: {val.strip()}" for col, val in row.items() if val and val.strip()]
+            if parts:
+                rows.append(" | ".join(parts))
+        
+        if not rows:
+            return raw
+        
+        header = "Columns: " + ", ".join(reader.fieldnames)
+        return header + "\n\n" + "\n".join(rows)
+    
+    @staticmethod
+    def _extract_from_xlsx(file_path: str) -> str:
+        """Turn XLSX rows into key: value style lines per sheet."""
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            raise ImportError("openpyxl is required: pip install openpyxl")
+        
+        wb = load_workbook(file_path, read_only=True, data_only=True)
+        all_sheets = []
+        
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            sheet_rows = list(ws.iter_rows(values_only=True))
+            if not sheet_rows:
+                continue
+            
+            headers = [str(h) if h is not None else f"Column_{i}" for i, h in enumerate(sheet_rows[0])]
+            lines = []
+            for row in sheet_rows[1:]:
+                parts = []
+                for col_name, val in zip(headers, row):
+                    if val is not None:
+                        parts.append(f"{col_name}: {str(val).strip()}")
+                if parts:
+                    lines.append(" | ".join(parts))
+            
+            if lines:
+                sheet_header = f"=== Sheet: {sheet_name} ===\nColumns: {', '.join(headers)}"
+                all_sheets.append(sheet_header + "\n\n" + "\n".join(lines))
+        
+        wb.close()
+        return "\n\n".join(all_sheets) if all_sheets else ""
     
     @classmethod
     def extract_from_multiple(cls, file_paths: List[str]) -> str:
         """
-        从多个文件提取文本并合并
-        
+        Extract and concatenate multiple files.
+
         Args:
-            file_paths: 文件路径列表
-            
+            file_paths: List of paths
+
         Returns:
-            合并后的文本
+            Merged text with per-file headers
         """
         all_texts = []
         
@@ -137,9 +194,11 @@ class FileParser:
             try:
                 text = cls.extract_text(file_path)
                 filename = Path(file_path).name
-                all_texts.append(f"=== 文档 {i}: {filename} ===\n{text}")
+                all_texts.append(f"=== Document {i}: {filename} ===\n{text}")
             except Exception as e:
-                all_texts.append(f"=== 文档 {i}: {file_path} (提取失败: {str(e)}) ===")
+                all_texts.append(
+                    f"=== Document {i}: {file_path} (extraction failed: {str(e)}) ==="
+                )
         
         return "\n\n".join(all_texts)
 
@@ -150,15 +209,15 @@ def split_text_into_chunks(
     overlap: int = 50
 ) -> List[str]:
     """
-    将文本分割成小块
-    
+    Split text into overlapping chunks.
+
     Args:
-        text: 原始文本
-        chunk_size: 每块的字符数
-        overlap: 重叠字符数
-        
+        text: Source text
+        chunk_size: Target chunk length in characters
+        overlap: Overlap between consecutive chunks
+
     Returns:
-        文本块列表
+        List of chunk strings
     """
     if len(text) <= chunk_size:
         return [text] if text.strip() else []
@@ -169,10 +228,9 @@ def split_text_into_chunks(
     while start < len(text):
         end = start + chunk_size
         
-        # 尝试在句子边界处分割
         if end < len(text):
-            # 查找最近的句子结束符
-            for sep in ['。', '！', '？', '.\n', '!\n', '?\n', '\n\n', '. ', '! ', '? ']:
+            # Prefer breaking at sentence boundaries (CJK + Latin)
+            for sep in ['\u3002', '\uff01', '\uff1f', '.\n', '!\n', '?\n', '\n\n', '. ', '! ', '? ']:
                 last_sep = text[start:end].rfind(sep)
                 if last_sep != -1 and last_sep > chunk_size * 0.3:
                     end = start + last_sep + len(sep)
@@ -182,8 +240,6 @@ def split_text_into_chunks(
         if chunk:
             chunks.append(chunk)
         
-        # 下一个块从重叠位置开始
         start = end - overlap if end < len(text) else len(text)
     
     return chunks
-
